@@ -39,19 +39,6 @@
 #include <asm/vdso.h>
 #include <asm/vdso_datapage.h>
 
-#ifdef USE_SYSCALL
-#if defined(__LP64__)
-static int enable_64 = 1;
-module_param(enable_64, int, 0600);
-MODULE_PARM_DESC(enable_64, "enable vDSO for aarch64 0=off");
-#endif
-#if (!defined(__LP64) || (defined(CONFIG_COMPAT) && defined(CONFIG_VDSO32)))
-static int enable_32 = 1;
-module_param(enable_32, int, 0600);
-MODULE_PARM_DESC(enable_32, "enable vDSO for aarch64 0=off");
-#endif
-#endif
-
 struct vdso_mappings {
 	unsigned long num_code_pages;
 	struct vm_special_mapping data_mapping;
@@ -232,23 +219,6 @@ static int __init vdso_mappings_init(const char *name,
 	return 0;
 }
 
-#ifdef CONFIG_COMPAT
-#ifdef CONFIG_VDSO32
-
-static struct vdso_mappings vdso32_mappings __ro_after_init;
-
-static int __init vdso32_init(void)
-{
-	extern char vdso32_start[], vdso32_end[];
-
-	return vdso_mappings_init("vdso32", vdso32_start, vdso32_end,
-				  &vdso32_mappings);
-}
-arch_initcall(vdso32_init);
-
-#endif /* CONFIG_VDSO32 */
-#endif /* CONFIG_COMPAT */
-
 static struct vdso_mappings vdso_mappings __ro_after_init;
 
 static int __init vdso_init(void)
@@ -289,33 +259,6 @@ static int vdso_setup(struct mm_struct *mm,
 		mm->context.vdso = (void *)vdso_base;
 	return PTR_ERR_OR_ZERO(ret);
 }
-
-#ifdef CONFIG_COMPAT
-#ifdef CONFIG_VDSO32
-int aarch32_setup_vectors_page(struct linux_binprm *bprm, int uses_interp)
-{
-	struct mm_struct *mm = current->mm;
-	void *ret;
-
-	down_write(&mm->mmap_sem);
-
-	ret = ERR_PTR(vdso_setup(mm, &vdso32_mappings));
-#ifdef CONFIG_KUSER_HELPERS
-	if (!IS_ERR(ret))
-		/* Map the kuser helpers at the ABI-defined high address. */
-		ret = _install_special_mapping(mm, AARCH32_KUSER_HELPERS_BASE,
-					       PAGE_SIZE,
-					       VM_READ|VM_EXEC|
-					       VM_MAYREAD|VM_MAYEXEC,
-					       &compat_vdso_spec[1]);
-#endif
-
-	up_write(&mm->mmap_sem);
-
-	return PTR_ERR_OR_ZERO(ret);
-}
-#endif /* CONFIG_VDSO32 */
-#endif /* CONFIG_COMPAT */
 
 int arch_setup_additional_pages(struct linux_binprm *bprm, int uses_interp)
 {
